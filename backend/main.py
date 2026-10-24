@@ -9,7 +9,7 @@ import os
 
 from database import (
     init_db, log_incident, get_recent_incidents, 
-    get_blocked_ips, is_ip_blocked
+    get_blocked_ips, is_ip_blocked, clear_all_incidents
 )
 from detector import analyze_login_attempt, analyze_web_payload, analyze_url_or_domain
 from responder import execute_playbook
@@ -19,7 +19,7 @@ init_db()
 
 app = FastAPI(
     title="SecAuto SOAR - Enterprise SOC Cyber Defense Platform",
-    description="Real-Time Visitor IP Tracking, Geolocation & Automated Threat Defense",
+    description="Real-Time Threat Detection & Response Engine",
     version="2.1.0"
 )
 
@@ -81,12 +81,8 @@ def health():
 
 @app.get("/api/whoami")
 def whoami(request: Request):
-    """
-    Returns the REAL IP, City, Country, Lat/Lon, and ISP of whoever opens the link!
-    """
     client_ip = get_real_client_ip(dict(request.headers), request.client.host if request.client else "127.0.0.1")
-    intel = enrich_ip_intelligence(client_ip)
-    return intel
+    return enrich_ip_intelligence(client_ip)
 
 @app.get("/api/incidents")
 def list_incidents():
@@ -95,6 +91,14 @@ def list_incidents():
 @app.get("/api/blocked-ips")
 def list_blocked():
     return get_blocked_ips()
+
+@app.delete("/api/incidents/clear")
+def clear_queue():
+    """
+    Clears all incident history and unblocks IPs for a fresh start!
+    """
+    clear_all_incidents()
+    return {"status": "CLEARED", "message": "All incidents and blocklists have been reset."}
 
 @app.get("/api/intel/{ip}")
 def get_ip_intel(ip: str):
@@ -106,16 +110,12 @@ def get_incident_report(req: ReportRequest):
     inc = next((i for i in incidents if i["incident_id"] == req.incident_id), None)
     if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
-    
     intel = enrich_ip_intelligence(inc["source_ip"])
     return generate_analyst_mitre_report(inc, intel)
 
 @app.post("/api/simulate/login")
 async def simulate_login(req: LoginAttempt, request: Request):
-    # Detect the REAL IP of whoever is sending the request
     client_ip = get_real_client_ip(dict(request.headers), request.client.host if request.client else "127.0.0.1")
-
-    # If testing locally, resolve the real public IP of this machine
     real_intel = enrich_ip_intelligence(client_ip)
     actual_ip = real_intel.get("ip", client_ip)
 

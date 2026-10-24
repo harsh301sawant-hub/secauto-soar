@@ -8,7 +8,6 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # Incidents table
     c.execute('''
         CREATE TABLE IF NOT EXISTS incidents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,7 +22,6 @@ def init_db():
         )
     ''')
     
-    # Blocked IPs table (Automated response enforcement)
     c.execute('''
         CREATE TABLE IF NOT EXISTS blocked_ips (
             ip TEXT PRIMARY KEY,
@@ -32,7 +30,6 @@ def init_db():
         )
     ''')
     
-    # Playbook Execution Logs
     c.execute('''
         CREATE TABLE IF NOT EXISTS playbook_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,7 +82,7 @@ def record_playbook_step(incident_id, step_name, action_taken, result):
     conn.commit()
     conn.close()
 
-def get_recent_incidents(limit=20):
+def get_recent_incidents(limit=50):
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
@@ -107,5 +104,17 @@ def update_incident_status(incident_id, status):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute('UPDATE incidents SET status = ? WHERE incident_id = ?', (status, incident_id))
+    conn.commit()
+    conn.close()
+
+def clear_all_incidents():
+    """
+    Clears all incident history and unblocks IPs for a clean test run!
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('DELETE FROM incidents')
+    c.execute('DELETE FROM blocked_ips')
+    c.execute('DELETE FROM playbook_logs')
     conn.commit()
     conn.close()

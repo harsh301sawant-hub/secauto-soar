@@ -17,7 +17,6 @@
     #attack-map { height: 260px; width: 100%; border-radius: 0.75rem; z-index: 10; }
     .pulse-dot { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-    /* Dark map filter */
     .leaflet-tile { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7); }
     .leaflet-container { background: #080d16 !important; }
   </style>
@@ -38,7 +37,7 @@
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span> LIVE ENGINE
           </span>
         </div>
-        <p class="text-xs text-gray-400">Automated Threat Detection, MITRE ATT&CK Mapping & Response Orchestration</p>
+        <p class="text-xs text-gray-400">Automated Threat Detection, Real IP Geolocation & Incident Response Platform</p>
       </div>
     </div>
 
@@ -84,7 +83,17 @@
         <h2 class="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2">
           <i class="fa-solid fa-list-check text-blue-400"></i> Ingested Threat Queue
         </h2>
-        <span class="text-[11px] text-gray-500 font-mono" id="incident-counter">0 events</span>
+        <div class="flex items-center gap-2">
+          <!-- REFRESH BUTTON -->
+          <button onclick="refreshQueue()" title="Refresh Threat Queue" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs border border-gray-700 transition flex items-center gap-1">
+            <i class="fa-solid fa-arrows-rotate" id="refresh-icon"></i> Refresh
+          </button>
+          <!-- CLEAR DB BUTTON -->
+          <button onclick="clearIncidentQueue()" title="Clear All Incidents" class="px-2 py-1 rounded bg-red-950/40 hover:bg-red-900/60 text-red-300 text-xs border border-red-800/40 transition">
+            <i class="fa-solid fa-trash-can"></i> Clear
+          </button>
+          <span class="text-[11px] text-gray-500 font-mono" id="incident-counter">0 events</span>
+        </div>
       </div>
 
       <div id="incident-container" class="space-y-3 overflow-y-auto max-h-[660px] pr-1">
@@ -115,9 +124,9 @@
 
         <!-- Intel & Attribution Metrics -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-3 border-t border-gray-800">
-          <div><span class="text-gray-500 block">Threat Attribution</span><span id="intel-actor" class="font-mono text-amber-300 font-semibold">Unknown Group</span></div>
-          <div><span class="text-gray-500 block">Adversary Origin</span><span id="intel-origin" class="font-mono text-gray-200">Global Recon</span></div>
-          <div><span class="text-gray-500 block">Abuse Confidence</span><span id="intel-abuse" class="font-mono text-red-400 font-bold">--</span></div>
+          <div><span class="text-gray-500 block">ISP Network</span><span id="intel-actor" class="font-mono text-amber-300 font-semibold">Unknown Network</span></div>
+          <div><span class="text-gray-500 block">Client Origin</span><span id="intel-origin" class="font-mono text-gray-200">Localhost / WAN</span></div>
+          <div><span class="text-gray-500 block">Tracked IP</span><span id="intel-abuse" class="font-mono text-red-400 font-bold">--</span></div>
           <div><span class="text-gray-500 block">Target Account</span><span id="active-user" class="font-mono text-gray-200">--</span></div>
         </div>
       </div>
@@ -225,7 +234,7 @@
 
         <div class="grid grid-cols-2 gap-3">
           <div class="p-3 rounded-lg bg-gray-900 border border-gray-800">
-            <span class="text-gray-400 font-semibold block mb-1">Adversary Attribution</span>
+            <span class="text-gray-400 font-semibold block mb-1">Adversary Network / ISP</span>
             <p id="rep-actor" class="text-amber-300 font-bold">--</p>
             <p id="rep-origin" class="text-gray-400 text-[11px] mt-0.5">--</p>
           </div>

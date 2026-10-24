@@ -7,7 +7,7 @@ let currentMarker = null;
 function initMap() {
   if (map) return;
   map = L.map('attack-map', {
-    center: [20.5937, 78.9629], // Default center on India
+    center: [20.5937, 78.9629],
     zoom: 4,
     zoomControl: false,
     attributionControl: false
@@ -43,7 +43,6 @@ function updateMapMarker(lat, lon, title, originText) {
   `).openPopup();
 }
 
-// Fetch who opened the URL right on page load!
 async function detectVisitorIdentity() {
   try {
     const res = await fetch('/api/whoami');
@@ -52,7 +51,6 @@ async function detectVisitorIdentity() {
     appendLog("VISITOR", `Client detected: ${me.ip} (${me.city}, ${me.country}) - ISP: ${me.isp}`);
     document.getElementById('map-target-status').textContent = `Your Live IP: ${me.ip} • ${me.city}, ${me.country}`;
     
-    // Center map on the actual visitor right away!
     if (me.lat && me.lon) {
       updateMapMarker(me.lat, me.lon, "Your Live Connection", `${me.city}, ${me.country} (${me.isp})`);
     }
@@ -94,6 +92,36 @@ function initWebSocket() {
   }
 }
 
+// Manual Refresh Queue function
+async function refreshQueue() {
+  const icon = document.getElementById('refresh-icon');
+  if (icon) icon.classList.add('animate-spin');
+  appendLog("SYSTEM", "Refreshing investigated threat queue from database...");
+  await loadData();
+  setTimeout(() => {
+    if (icon) icon.classList.remove('animate-spin');
+  }, 500);
+}
+
+// Clear incident queue function
+async function clearIncidentQueue() {
+  if (!confirm("Are you sure you want to clear all incidents and unblock IPs?")) return;
+  try {
+    await fetch('/api/incidents/clear', { method: 'DELETE' });
+    incidents = [];
+    selectedIncident = null;
+    appendLog("SYSTEM", "Threat queue & blocklists cleared successfully.");
+    resetPipeline();
+    document.getElementById('active-title').textContent = "No Incident Selected";
+    document.getElementById('active-desc').textContent = "Threat queue has been reset. Click 'Simulate Live Attack' to start fresh!";
+    document.getElementById('active-badge').textContent = "STANDBY";
+    document.getElementById('active-badge').className = "text-xs font-bold px-2.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700";
+    await loadData();
+  } catch (e) {
+    console.error("Failed to clear queue:", e);
+  }
+}
+
 async function loadData() {
   try {
     const [incRes, blockRes] = await Promise.all([
@@ -130,7 +158,7 @@ function renderIncidentList() {
     container.innerHTML = `
       <div class="card-panel p-5 rounded-xl text-center text-gray-500 text-xs py-12">
         <i class="fa-solid fa-shield-cat text-3xl mb-3 text-gray-600"></i>
-        <p>No active incidents detected yet. Test an attack above!</p>
+        <p>No active incidents in queue. Click 'Simulate Live Attack' above!</p>
       </div>`;
     return;
   }
@@ -317,7 +345,6 @@ function closeReportModal() {
   document.getElementById('report-modal').classList.add('hidden');
 }
 
-// In-browser simulation: uses the ACTUAL user's connection IP!
 async function simulateBruteForce() {
   appendLog("DEMO", "Testing brute-force attack from YOUR REAL IP connection...");
 
