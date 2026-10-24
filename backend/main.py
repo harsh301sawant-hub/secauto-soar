@@ -20,7 +20,7 @@ init_db()
 app = FastAPI(
     title="SecAuto SOAR - Enterprise SOC Cyber Defense Platform",
     description="Real-Time Threat Detection & Response Engine",
-    version="2.1.0"
+    version="2.2.0"
 )
 
 app.add_middleware(
@@ -77,7 +77,7 @@ class ReportRequest(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ONLINE", "engine": "SecAuto SOAR v2.1.0"}
+    return {"status": "ONLINE", "engine": "SecAuto SOAR v2.2.0"}
 
 @app.get("/api/whoami")
 def whoami(request: Request):
@@ -94,9 +94,6 @@ def list_blocked():
 
 @app.delete("/api/incidents/clear")
 def clear_queue():
-    """
-    Clears all incident history and unblocks IPs for a fresh start!
-    """
     clear_all_incidents()
     return {"status": "CLEARED", "message": "All incidents and blocklists have been reset."}
 
@@ -191,8 +188,49 @@ async def simulate_web_attack(req: WebRequest, request: Request):
     return {"status": "SAFE", "message": "Payload passed WAF checks."}
 
 @app.post("/api/scan/phishing")
-def scan_phishing(req: PhishingCheck):
-    return analyze_url_or_domain(req.url)
+async def scan_phishing(req: PhishingCheck, request: Request):
+    """
+    Scans URL for phishing. If verdict is MALICIOUS, automatically creates 
+    a high-priority incident in the Ingested Threat Queue!
+    """
+    result = analyze_url_or_domain(req.url)
+    
+    # If malicious or high-risk, log it into the SOAR Threat Queue!
+    if result["verdict"] in ["MALICIOUS", "SUSPICIOUS"]:
+        client_ip = get_real_client_ip(dict(request.headers), request.client.host if request.client else "127.0.0.1")
+        real_intel = enrich_ip_intelligence(client_ip)
+        actual_ip = real_intel.get("ip", client_ip)
+
+        inc_id = f"INC-{uuid.uuid4().hex[:6].upper()}"
+        reasons_summary = "; ".join(result["reasons"])
+        
+        log_incident(
+            incident_id=inc_id,
+            attack_type="Phishing & Deceptive URL Detected",
+            severity="HIGH" if result["verdict"] == "MALICIOUS" else "MEDIUM",
+            source_ip=actual_ip,
+            target_user=f"Target Link: {req.url[:40]}...",
+            details=f"URL: {req.url} | Risk Score: {result['risk_score']}/100 | Reasons: {reasons_summary}"
+        )
+
+        # Broadcast live to the dashboard queue!
+        await manager.broadcast({
+            "type": "NEW_INCIDENT",
+            "incident": {
+                "incident_id": inc_id,
+                "attack_type": "Phishing & Deceptive URL Detected",
+                "severity": "HIGH" if result["verdict"] == "MALICIOUS" else "MEDIUM",
+                "source_ip": actual_ip,
+                "target_user": req.url,
+                "details": f"Deceptive Link Detected: {req.url} (Score {result['risk_score']}/100). Flags: {reasons_summary}",
+                "auto_playbook": "Playbook_Phishing_Sinkhole.yaml",
+                "status": "ACTIVE",
+                "intel": real_intel
+            }
+        })
+        result["incident_id"] = inc_id
+
+    return result
 
 @app.post("/api/playbook/run")
 async def run_playbook(req: PlaybookRequest):

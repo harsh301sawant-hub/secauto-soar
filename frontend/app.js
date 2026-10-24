@@ -92,7 +92,6 @@ function initWebSocket() {
   }
 }
 
-// Manual Refresh Queue function
 async function refreshQueue() {
   const icon = document.getElementById('refresh-icon');
   if (icon) icon.classList.add('animate-spin');
@@ -103,7 +102,6 @@ async function refreshQueue() {
   }, 500);
 }
 
-// Clear incident queue function
 async function clearIncidentQueue() {
   if (!confirm("Are you sure you want to clear all incidents and unblock IPs?")) return;
   try {
@@ -113,7 +111,7 @@ async function clearIncidentQueue() {
     appendLog("SYSTEM", "Threat queue & blocklists cleared successfully.");
     resetPipeline();
     document.getElementById('active-title').textContent = "No Incident Selected";
-    document.getElementById('active-desc').textContent = "Threat queue has been reset. Click 'Simulate Live Attack' to start fresh!";
+    document.getElementById('active-desc').textContent = "Threat queue has been reset. Click 'Simulate Live Attack' or scan a URL to start fresh!";
     document.getElementById('active-badge').textContent = "STANDBY";
     document.getElementById('active-badge').className = "text-xs font-bold px-2.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700";
     await loadData();
@@ -158,15 +156,16 @@ function renderIncidentList() {
     container.innerHTML = `
       <div class="card-panel p-5 rounded-xl text-center text-gray-500 text-xs py-12">
         <i class="fa-solid fa-shield-cat text-3xl mb-3 text-gray-600"></i>
-        <p>No active incidents in queue. Click 'Simulate Live Attack' above!</p>
+        <p>No active incidents in queue. Click 'Simulate Live Attack' or scan a URL above!</p>
       </div>`;
     return;
   }
 
   container.innerHTML = incidents.map(inc => {
     const isCrit = inc.severity === 'CRITICAL';
+    const isHigh = inc.severity === 'HIGH';
     const isMitigated = inc.status === 'MITIGATED';
-    const badgeColor = isCrit ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+    const badgeColor = isCrit ? 'text-red-400 bg-red-500/10 border-red-500/20' : isHigh ? 'text-orange-400 bg-orange-500/10 border-orange-500/20' : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
     const isSelected = selectedIncident && selectedIncident.incident_id === inc.incident_id;
 
     return `
@@ -176,7 +175,7 @@ function renderIncidentList() {
           <span class="text-[10px] ${isMitigated ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold'}">${inc.status}</span>
         </div>
         <h4 class="text-xs font-bold text-white mb-1">${inc.attack_type}</h4>
-        <p class="text-[11px] text-gray-400 font-mono truncate mb-2">Real IP: ${inc.source_ip} • Target: ${inc.target_user}</p>
+        <p class="text-[11px] text-gray-400 font-mono truncate mb-2">Origin: ${inc.source_ip} • Target: ${inc.target_user}</p>
         <div class="text-[10px] text-gray-500 flex justify-between">
           <span>${inc.incident_id}</span>
           <span class="text-blue-400">View Geolocation →</span>
@@ -194,8 +193,11 @@ async function selectIncident(id) {
   renderIncidentList();
 
   const isCrit = inc.severity === 'CRITICAL';
+  const isHigh = inc.severity === 'HIGH';
+  const badgeColor = isCrit ? 'text-red-400 bg-red-500/10 border-red-500/20' : isHigh ? 'text-orange-400 bg-orange-500/10 border-orange-500/20' : 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+
   document.getElementById('active-badge').textContent = inc.severity;
-  document.getElementById('active-badge').className = `text-xs font-bold px-2.5 py-0.5 rounded border ${isCrit ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-amber-400 bg-amber-500/10 border-amber-500/20'}`;
+  document.getElementById('active-badge').className = `text-xs font-bold px-2.5 py-0.5 rounded border ${badgeColor}`;
   
   document.getElementById('active-title').textContent = `${inc.incident_id}: ${inc.attack_type}`;
   document.getElementById('active-desc').textContent = inc.details;
@@ -233,7 +235,7 @@ function handleNewIncident(inc) {
   document.getElementById('metric-total').textContent = incidents.length;
   document.getElementById('metric-active').textContent = incidents.filter(i => i.status === 'ACTIVE').length;
   
-  appendLog("ALERT", `[${inc.severity}] ${inc.attack_type} detected from ${inc.source_ip}! Incident: ${inc.incident_id}`);
+  appendLog("ALERT", `[${inc.severity}] ${inc.attack_type} logged from ${inc.source_ip}! Incident: ${inc.incident_id}`);
   renderIncidentList();
   selectIncident(inc.incident_id);
 }
@@ -372,10 +374,10 @@ async function simulateBruteForce() {
 }
 
 async function testPhishingModal() {
-  const url = prompt("Enter a URL to test for Phishing / Threat Indicators:", "https://secure-login-paypal.verify-account.cc/billing");
+  const url = prompt("Enter a URL to test for Phishing / Threat Indicators:", "http://192.168.1.5/apple-id-verify-alert");
   if (!url) return;
 
-  appendLog("SCAN", `Scanning URL: ${url}`);
+  appendLog("SCAN", `Scanning URL for threat indicators: ${url}`);
   try {
     const res = await fetch('/api/scan/phishing', {
       method: 'POST',
@@ -383,8 +385,15 @@ async function testPhishingModal() {
       body: JSON.stringify({ url })
     });
     const data = await res.json();
-    alert(`Analysis Result:\n\nVerdict: ${data.verdict}\nRisk Score: ${data.risk_score}/100\n\nReasons:\n- ${data.reasons.join('\n- ')}`);
-    appendLog("SCAN_RESULT", `URL flagged as [${data.verdict}] (Score: ${data.risk_score}/100)`);
+    
+    if (data.verdict === "MALICIOUS" || data.verdict === "SUSPICIOUS") {
+      alert(`⚠️ THREAT DETECTED & ADDED TO QUEUE!\n\nVerdict: ${data.verdict}\nRisk Score: ${data.risk_score}/100\nIncident ID: ${data.incident_id || 'LOGGED'}\n\nDetected Flaws:\n- ${data.reasons.join('\n- ')}\n\nThis incident has been automatically added to your Ingested Threat Queue!`);
+      appendLog("ALERT", `Malicious URL detected: ${url} (Score: ${data.risk_score}/100) -> Logged to Threat Queue!`);
+      await loadData();
+    } else {
+      alert(`✅ URL Analysis Result:\n\nVerdict: ${data.verdict}\nRisk Score: ${data.risk_score}/100\n\nNo active threat detected.`);
+      appendLog("SCAN_RESULT", `URL ${url} is [SAFE]`);
+    }
   } catch (e) {
     console.error(e);
   }
